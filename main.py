@@ -41,6 +41,7 @@ def download_history():
 		crypto["max_24h"] = (0, float(-sys.maxsize))
 		crypto["min_1h"] = (0, float(sys.maxsize))
 		crypto["max_1h"] = (0, float(-sys.maxsize))
+		crypto["last_notif_price"] = 0
 		for candlestick in candlesticks:
 			#TOHLC - Time, Open, High, Low, Close
 			if (float(candlestick[2]) > crypto["max_24h"][1]):
@@ -87,16 +88,26 @@ def received_price(symbol, timestamp, price):
 			crypto["prices"].pop(timestamp - 3600000) # 3600000 is 1 hour in milliseconds
 	if (price > crypto["max_1h"][1]):
 		crypto["max_1h"] = (int(timestamp), price)
-		comm.communicate(msg="1h New High: " + str(price), mail=False, console=True, telegram=True, log=True)
 		if (price > crypto["max_24h"][1]):
 			crypto["max_24h"] = (int(timestamp), price)
-			comm.communicate(msg="24h New High: " + str(price), mail=False, console=True, telegram=True, log=True)
+			new_record(symbol, '24h', 'High', price, crypto)
+		else:
+			new_record(symbol, '1h', 'High', price, crypto)
 	elif (price < crypto["min_1h"][1]):
 		crypto["min_1h"] = (int(timestamp), price)
-		comm.communicate(msg="1h New Low: " + str(price), mail=False, console=True, telegram=True, log=True)
 		if (price < crypto["min_24h"][1]):
 			crypto["min_24h"] = (int(timestamp), price)
-			comm.communicate(msg="24h New Low: " + str(price), mail=False, console=True, telegram=True, log=True)
+			new_record(symbol, '24h', 'Low', price, crypto)
+		else:
+			new_record(symbol, '1h', 'Low', price, crypto)
+
+def new_record(symbol, timeframe, record_type, price, crypto):
+	diff = crypto["last_notif_price"] - price
+	if (diff < 0):
+		diff *= -1
+	if (diff / price >= 0.002): #0.002 is for 0.2% difference this could be a variable but flemme
+		comm.communicate(msg=f"{symbol} --> {timeframe} New {record_type}: {price}", mail=False, console=True, telegram=True, log=True)
+		crypto["last_notif_price"] = price
 
 def main(config_file = "configs/default.json"):
 	if not (os.path.exists(config.LOG_DIRECTORY)):
