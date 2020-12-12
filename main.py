@@ -10,6 +10,9 @@ import src.config as config
 from binance.client import Client
 from binance.websockets import BinanceSocketManager
 from binance.exceptions import *
+import discord
+from discord.ext import tasks
+import asyncio
 
 
 
@@ -41,21 +44,29 @@ def download_history():
 		crypto["prices"] = {}
 		crypto["min_24h"] = (0, float(sys.maxsize))
 		crypto["max_24h"] = (0, float(-sys.maxsize))
+		crypto["min_4h"] = (0, float(sys.maxsize))
+		crypto["max_4h"] = (0, float(-sys.maxsize))
 		crypto["min_1h"] = (0, float(sys.maxsize))
 		crypto["max_1h"] = (0, float(-sys.maxsize))
 		crypto["last_notif_price"] = 0
-		for candlestick in candlesticks:
-			#TOHLC - Time, Open, High, Low, Close
-			if (float(candlestick[2]) > crypto["max_24h"][1]):
-				crypto["max_24h"] = (int(candlestick[0]), float(candlestick[2]))
-			elif (float(candlestick[3]) < crypto["min_24h"][1]):
-				crypto["min_24h"] = (int(candlestick[0]), float(candlestick[3]))
-		for i in range(60, 0, -1):
+		for i in range(len(candlesticks), 0, -1):
 			candlestick = candlesticks[-i]
-			if (float(candlestick[2]) > crypto["max_1h"][1]):
-				crypto["max_1h"] = (int(candlestick[0]), float(candlestick[2]))
-			elif (float(candlestick[3]) < crypto["min_1h"][1]):
-				crypto["min_1h"] = (int(candlestick[0]), float(candlestick[3]))
+			#TOHLC - Time, Open, High, Low, Close
+			if (i <= 60):
+				if (float(candlestick[2]) > crypto["max_1h"][1]):
+					crypto["max_1h"] = (int(candlestick[0]), float(candlestick[2]))
+				elif (float(candlestick[3]) < crypto["min_1h"][1]):
+					crypto["min_1h"] = (int(candlestick[0]), float(candlestick[3]))
+			if (i <= 240):
+				if (float(candlestick[2]) > crypto["max_4h"][1]):
+					crypto["max_4h"] = (int(candlestick[0]), float(candlestick[2]))
+				elif (float(candlestick[3]) < crypto["min_4h"][1]):
+					crypto["min_4h"] = (int(candlestick[0]), float(candlestick[3]))
+			if (i <= 1440):
+				if (float(candlestick[2]) > crypto["max_24h"][1]):
+					crypto["max_24h"] = (int(candlestick[0]), float(candlestick[2]))
+				elif (float(candlestick[3]) < crypto["min_24h"][1]):
+					crypto["min_24h"] = (int(candlestick[0]), float(candlestick[3]))
 			crypto["prices"][int(candlestick[0])] = float(candlestick[4])
 
 def start_data_streams():
@@ -83,7 +94,6 @@ def received_price_msg(msg):
 			mail=False, console=True, log=True, telegram=True, quit=False)
 
 def received_price(symbol, timestamp, price):
-	#TODO MODIFY SO THAT THE 24h LOW HIGH IS CORRECT BECAUSE NOW IT IS AN ALL TIME LOW HIGH 
 	crypto = crypto_list[symbol]
 	if timestamp in crypto["prices"]:
 		crypto["prices"][timestamp] = price
@@ -98,6 +108,10 @@ def received_price(symbol, timestamp, price):
 		crypto["max_1h"] = find_new_record(timestamp, '1h', crypto["prices"], 'High')
 	if (crypto["min_1h"][0] + 3600000 < timestamp):
 		crypto["min_1h"] = find_new_record(timestamp, '1h', crypto["prices"], 'Low')
+	if (crypto["max_4h"][0] + 3600000 < timestamp):
+		crypto["max_4h"] = find_new_record(timestamp, '4h', crypto["prices"], 'High')
+	if (crypto["min_4h"][0] + 3600000 < timestamp):
+		crypto["min_4h"] = find_new_record(timestamp, '4h', crypto["prices"], 'Low')
 	if (crypto["max_24h"][0] + (3600000 * 24) < timestamp):
 		crypto["max_24h"] = find_new_record(timestamp, '24h', crypto["prices"], 'High')
 	if (crypto["min_24h"][0] + (3600000 * 24) < timestamp):
@@ -106,16 +120,24 @@ def received_price(symbol, timestamp, price):
 	# Checking if current price is a record
 	if (price > crypto["max_1h"][1]):
 		crypto["max_1h"] = (int(timestamp), price)
-		if (price > crypto["max_24h"][1]):
-			crypto["max_24h"] = (int(timestamp), price)
-			new_record(symbol, '24h', 'High', price, crypto)
+		if (price > crypto["max_4h"][1]):
+			crypto["max_4h"] = (int(timestamp), price)
+			if (price > crypto["max_24h"][1]):
+				crypto["max_24h"] = (int(timestamp), price)
+				new_record(symbol, '24h', 'High', price, crypto)
+			else:
+				new_record(symbol, '4h', 'High', price, crypto)
 		else:
 			new_record(symbol, '1h', 'High', price, crypto)
 	elif (price < crypto["min_1h"][1]):
 		crypto["min_1h"] = (int(timestamp), price)
-		if (price < crypto["min_24h"][1]):
-			crypto["min_24h"] = (int(timestamp), price)
-			new_record(symbol, '24h', 'Low', price, crypto)
+		if (price < crypto["min_4h"][1]):
+			crypto["min_4h"] = (int(timestamp), price)
+			if (price < crypto["min_24h"][1]):
+				crypto["min_24h"] = (int(timestamp), price)
+				new_record(symbol, '24h', 'Low', price, crypto)
+			else:
+				new_record(symbol, '4h', 'Low', price, crypto)
 		else:
 			new_record(symbol, '1h', 'Low', price, crypto)
 
@@ -130,19 +152,28 @@ def new_record(symbol, timeframe, record_type, price, crypto):
 def find_new_record(timestamp, timeframe, prices, record_type):
 	try:
 		record = (0, sys.maxsize) if record_type == 'Low' else (0, -sys.maxsize - 1)
-		
-		for i in range(0, (60 if timeframe == '1h' else 1440)):
+		for i in range(0, (60 if timeframe == '1h' else (240 if timeframe == '4h' else 1440))):
+			test_timestamp = timestamp - (i * 60000)
 			if (record_type == 'Low'):
-				if prices[timestamp - (i * 60000)] < record[1]:
-					record = (timestamp - (i * 60000), prices[timestamp - (i * 60000)])
+				if prices[test_timestamp] < record[1]:
+					record = (test_timestamp, prices[test_timestamp])
 			else:
-				if prices[timestamp - (i * 60000)] > record[1]:
-					record = (timestamp - (i * 60000), prices[timestamp - (i * 60000)])
+				if prices[test_timestamp] > record[1]:
+					record = (test_timestamp, prices[test_timestamp])
 		
-		comm.communicate(msg="TEST timestamp: " + str(timestamp) + " record_type: " + record_type + " time_frame: " + timeframe + " New record found: " + str(record), mail=False, console=False, telegram=True, log=True)
+		#comm.communicate(msg="TEST timestamp: " + str(timestamp) + " record_type: " + record_type + " time_frame: " + timeframe + " New record found: " + str(record), mail=False, console=False, telegram=True, log=True)
 		return record
 	except Exception as e:
-		print("Caught exception: " + str(e))
+		comm.report_error(msg="Caught exception: " + str(e), mail=False, console=True, log=True, telegram=True, quit=False)
+
+@tasks.loop(seconds=1)
+async def my_background_task():
+	channel = config.disc_client.get_channel(private_config.DISCORD_NOTIF_CHANNEL)
+	while len(config.discord_msgs_buffer) > 0:
+		await channel.send(config.discord_msgs_buffer[0])
+		config.discord_msgs_buffer.pop(0)
+
+
 
 def main(config_file = "configs/default.json"):
 	if not (os.path.exists(config.LOG_DIRECTORY)):
@@ -161,6 +192,12 @@ def main(config_file = "configs/default.json"):
 	download_history()
 	start_data_streams()
 	comm.communicate(msg="Finished loading!", mail=False, console=True, telegram=True if (config.RELEASE_MODE) else False, log=True)
+	config.disc_client.run(private_config.DISCORD_TOKEN)
+
+@config.disc_client.event
+async def on_ready():
+	my_background_task.start()
+	print(f"Discord bot connected!")
 
 if __name__ == "__main__":
 	argv = sys.argv

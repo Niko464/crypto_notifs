@@ -25,7 +25,7 @@ def send_mail_to_mailing_list(msg):
 		report_error(msg="MAIL FAIL -> Do you have internet ?", log=True, console=True, telegram=False, mail=False, quit=False)
 
 
-
+"""
 def send_telegram_message(msg_to_send):
 	try:
 		params = {"chat_id": private_config.TELEGRAM_CHAT_ID, "text": config.BOT_NAME + " | " + msg_to_send}
@@ -33,14 +33,15 @@ def send_telegram_message(msg_to_send):
 		return response
 	except:
 		report_error(msg="TELEGRAM MSG FAIL -> Do you have internet ?", log=True, console=True, telegram=False, mail=False, quit=False)
-
+"""
 
 
 def report_error(msg, mail, telegram, console, log, quit):
 	if (mail == True and config.RELEASE_MODE == True):
 		send_mail_to_mailing_list(msg)
 	if (telegram == True):
-		send_telegram_message(msg)
+		#send_telegram_message(msg)
+		config.discord_msgs_buffer.append(msg)
 	if (console == True):
 		print(msg)
 	if (log == True):
@@ -54,7 +55,8 @@ def communicate(msg, mail, telegram, console, log):
 	if (mail == True and config.RELEASE_MODE == True):
 		send_mail_to_mailing_list(msg)
 	if (telegram == True):
-		send_telegram_message(msg)
+		#send_telegram_message(msg)
+		config.discord_msgs_buffer.append(msg)
 	if (console == True):
 		print(msg)
 	if (log == True):
