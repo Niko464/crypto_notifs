@@ -1,1 +1,1 @@
-{"crypto_list": ["BTCUSDT", "ETHUSDT"]}
+{"crypto_list": ["BTCUSDT", "ETHUSDT"], "options": {"1h_notifs": 0.0, "4h_notifs": 1, "24h_notifs": 1}}

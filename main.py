@@ -18,10 +18,14 @@ import asyncio
 
 
 global crypto_list
+global options
 global bsm
 global client
 global is_ready_to_receive_new_msg
+global CONFIG_FILE_PATH
+CONFIG_FILE_PATH = ""
 crypto_list = {}
+options = {}
 client = Client(private_config.API_KEY, private_config.API_SECRET)
 is_ready_to_receive_new_msg = True
 
@@ -31,8 +35,26 @@ def load_config(file):
 			json_data = json.load(json_file)
 			for crypto in json_data["crypto_list"]:
 				crypto_list[crypto] = {"symbol": crypto}
+			for key, value in json_data["options"].items():
+				options[key] = value
 	except Exception as e:
 		print("Error while loading config: " + file + " exiting...")
+		print("Exception: " + str(e))
+		sys.exit(-1)
+
+def save_config(file):
+	try:
+		data = {}
+		data["crypto_list"] = []
+		data["options"] = {}
+		for value in crypto_list:
+			data["crypto_list"].append(value)
+		for key, value in options.items():
+			data["options"][key] = value
+		with open(file, 'w') as file:
+			json.dump(data, file)
+	except Exception as e:
+		print("Error while saving config: " + file + " exiting...")
 		print("Exception: " + str(e))
 		sys.exit(-1)
 
@@ -48,6 +70,8 @@ def download_history():
 		crypto["max_4h"] = (0, float(-sys.maxsize))
 		crypto["min_1h"] = (0, float(sys.maxsize))
 		crypto["max_1h"] = (0, float(-sys.maxsize))
+		crypto["personal_notification_prices"] = []
+		crypto["last_received_price"] = float(candlesticks[-1][4])
 		crypto["last_notif_price"] = 0
 		for i in range(len(candlesticks), 0, -1):
 			candlestick = candlesticks[-i]
@@ -95,6 +119,14 @@ def received_price_msg(msg):
 
 def received_price(symbol, timestamp, price):
 	crypto = crypto_list[symbol]
+	crypto["last_received_price"] = price
+	# Checking personal notifications
+	for notification_elem in list(crypto["personal_notification_prices"]):
+		if ((notification_elem[0] > notification_elem[1]) and (price < notification_elem[1])) or\
+			((notification_elem[0] < notification_elem[1]) and (price > notification_elem[1])):
+			comm.communicate(msg=f"!notify cmd: {symbol} crossed {notification_elem[1]} current price: {price}", mail=False, console=True, telegram=True, log=True)
+			crypto["personal_notification_prices"].remove(notification_elem)
+	# Updating price history
 	if timestamp in crypto["prices"]:
 		crypto["prices"][timestamp] = price
 	else:
@@ -146,7 +178,7 @@ def new_record(symbol, timeframe, record_type, price, crypto):
 	if (diff < 0):
 		diff *= -1
 	if (diff / price >= 0.002): #0.002 is for 0.2% difference this could be a variable but flemme
-		comm.communicate(msg=f"{symbol} --> {timeframe} New {record_type}: {price}", mail=False, console=True, telegram=True, log=True)
+		comm.communicate(msg=f"{symbol} --> {timeframe} New {record_type}: {price}", mail=False, console=True, telegram=True if (options[timeframe + "_notifs"] == 1) else False, log=True)
 		crypto["last_notif_price"] = price
 
 def find_new_record(timestamp, timeframe, prices, record_type):
@@ -167,11 +199,75 @@ def find_new_record(timestamp, timeframe, prices, record_type):
 		comm.report_error(msg="Caught exception: " + str(e), mail=False, console=True, log=True, telegram=True, quit=False)
 
 @tasks.loop(seconds=1)
-async def my_background_task():
+async def my_task():
 	channel = config.disc_client.get_channel(private_config.DISCORD_NOTIF_CHANNEL)
 	while len(config.discord_msgs_buffer) > 0:
 		await channel.send(config.discord_msgs_buffer[0])
 		config.discord_msgs_buffer.pop(0)
+
+@config.disc_client.command(name="notify")
+async def notify_command(ctx, *args):
+	usage_str = "Usage: !notify <add/remove/list> <coin ex: ETHUSDT> <price ex: 580>"
+	if len(args) == 3:
+		try:
+			crypto = crypto_list[args[1]]
+			notify_price = float(args[2])
+			if (args[0].lower() == "add"):
+				crypto["personal_notification_prices"].append((crypto["last_received_price"], notify_price))
+				await ctx.channel.send("Added " + args[2] + " to " + args[1] + "'s notification list.")
+			elif(args[0].lower() == "remove"):
+				counter = 0
+				for notification_elem in list(crypto["personal_notification_prices"]):
+					if (notify_price == notification_elem[1]):
+						crypto["personal_notification_prices"].remove(notification_elem)
+						counter += 1
+				await ctx.channel.send("Removed all " + args[2] + " from " + args[1] + "'s notification list (" + str(counter) + " elements removed).")
+		except:
+			await ctx.channel.send(usage_str)
+	elif (len(args) == 2):
+		try:
+			crypto = crypto_list[args[1]]
+			if (args[0].lower() == 'list'):
+				if (len(crypto["personal_notification_prices"]) > 0):
+					await ctx.channel.send("Here is the list:")
+					for notification_elem in crypto["personal_notification_prices"]:
+						await ctx.channel.send("- " + str(notification_elem[1]))
+				else:
+					await ctx.channel.send("No elements found in " + args[1] + "' notification list.")
+			else:
+				await ctx.channel.send(usage_str) 
+		except:
+			await ctx.channel.send(usage_str)
+	else:
+		await ctx.channel.send(usage_str)
+
+@config.disc_client.command(name="options")
+async def options_command(ctx, *args):
+	usage_str = "Usage: !options <set/list> <option name> <value (1 or 0 for bools)>"
+	if len(args) == 3:
+		if args[0].lower() == "set":
+			try:
+				option_name = args[1]
+				option_value = float(args[2])
+				if option_name in options:
+					options[option_name] = option_value
+					save_config(CONFIG_FILE_PATH)
+					await ctx.channel.send("Changed option " + args[1] + " to " + args[2] + ".")
+				else:
+					await ctx.channel.send("Option " + args[1] + " not found.")
+			except:
+				await ctx.channel.send(usage_str)
+		else:
+			await ctx.channel.send(usage_str)
+	elif (len(args) == 1):
+		if args[0].lower() == "list":
+			await ctx.channel.send("Here are the available options\n- option_name | option_value")
+			for key, value in options.items():
+				await ctx.channel.send("- " + str(key) + " | " + str(value))
+		else:
+			await ctx.channel.send(usage_str)
+	else:
+		await ctx.channel.send(usage_str)
 
 
 
@@ -188,6 +284,8 @@ def main(config_file = "configs/default.json"):
                         level=logging.DEBUG)
 	logging.getLogger("requests").setLevel(logging.WARNING)
 	logging.getLogger("urllib3").setLevel(logging.WARNING)
+	global CONFIG_FILE_PATH
+	CONFIG_FILE_PATH = config_file
 	load_config(config_file)
 	download_history()
 	start_data_streams()
@@ -196,7 +294,7 @@ def main(config_file = "configs/default.json"):
 
 @config.disc_client.event
 async def on_ready():
-	my_background_task.start()
+	my_task.start()
 	print(f"Discord bot connected!")
 
 if __name__ == "__main__":
