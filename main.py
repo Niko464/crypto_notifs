@@ -16,25 +16,21 @@ import asyncio
 
 
 
-
+global main_info
 global crypto_list
 global options
-global bsm
-global client
-global is_ready_to_receive_new_msg
 global CONFIG_FILE_PATH
 CONFIG_FILE_PATH = ""
+main_info = {}
 crypto_list = {}
 options = {}
-client = Client(private_config.API_KEY, private_config.API_SECRET)
-is_ready_to_receive_new_msg = True
 
 def load_config(file):
 	try:
 		with open(file) as json_file:
 			json_data = json.load(json_file)
-			for crypto in json_data["crypto_list"]:
-				crypto_list[crypto] = {"symbol": crypto}
+			for crypto_elem in json_data["crypto_list"]:
+				crypto_list[crypto_elem["symbol"]] = crypto_elem
 			for key, value in json_data["options"].items():
 				options[key] = value
 	except Exception as e:
@@ -47,8 +43,9 @@ def save_config(file):
 		data = {}
 		data["crypto_list"] = []
 		data["options"] = {}
-		for value in crypto_list:
-			data["crypto_list"].append(value)
+		for symbol in crypto_list:
+			crypto = crypto_list[symbol]
+			data["crypto_list"].append({"symbol": crypto["symbol"], "options": crypto["options"]})
 		for key, value in options.items():
 			data["options"][key] = value
 		with open(file, 'w') as file:
@@ -58,58 +55,55 @@ def save_config(file):
 		print("Exception: " + str(e))
 		sys.exit(-1)
 
-def download_history():
-	for symbol in crypto_list:
-		crypto = crypto_list[symbol]
-		print("Downloading history of " + str(symbol) + "...")
-		candlesticks = client.get_historical_klines(symbol, Client.KLINE_INTERVAL_1MINUTE, "1 Day Ago")
-		crypto["prices"] = {}
-		crypto["min_24h"] = (0, float(sys.maxsize))
-		crypto["max_24h"] = (0, float(-sys.maxsize))
-		crypto["min_4h"] = (0, float(sys.maxsize))
-		crypto["max_4h"] = (0, float(-sys.maxsize))
-		crypto["min_1h"] = (0, float(sys.maxsize))
-		crypto["max_1h"] = (0, float(-sys.maxsize))
-		crypto["personal_notification_prices"] = []
-		crypto["last_received_price"] = float(candlesticks[-1][4])
-		crypto["last_notif_price"] = 0
-		for i in range(len(candlesticks), 0, -1):
-			candlestick = candlesticks[-i]
-			#TOHLC - Time, Open, High, Low, Close
-			if (i <= 60):
-				if (float(candlestick[2]) > crypto["max_1h"][1]):
-					crypto["max_1h"] = (int(candlestick[0]), float(candlestick[2]))
-				elif (float(candlestick[3]) < crypto["min_1h"][1]):
-					crypto["min_1h"] = (int(candlestick[0]), float(candlestick[3]))
-			if (i <= 240):
-				if (float(candlestick[2]) > crypto["max_4h"][1]):
-					crypto["max_4h"] = (int(candlestick[0]), float(candlestick[2]))
-				elif (float(candlestick[3]) < crypto["min_4h"][1]):
-					crypto["min_4h"] = (int(candlestick[0]), float(candlestick[3]))
-			if (i <= 1440):
-				if (float(candlestick[2]) > crypto["max_24h"][1]):
-					crypto["max_24h"] = (int(candlestick[0]), float(candlestick[2]))
-				elif (float(candlestick[3]) < crypto["min_24h"][1]):
-					crypto["min_24h"] = (int(candlestick[0]), float(candlestick[3]))
-			crypto["prices"][int(candlestick[0])] = float(candlestick[4])
+def download_history_one_crypto(crypto, symbol):
+	print("Downloading history of " + str(symbol) + "...")
+	candlesticks = main_info["binance_client"].get_historical_klines(symbol, Client.KLINE_INTERVAL_1MINUTE, "1 Day Ago")
+	crypto["prices"] = {}
+	crypto["min_24h"] = (0, float(sys.maxsize))
+	crypto["max_24h"] = (0, float(-sys.maxsize))
+	crypto["min_4h"] = (0, float(sys.maxsize))
+	crypto["max_4h"] = (0, float(-sys.maxsize))
+	crypto["min_1h"] = (0, float(sys.maxsize))
+	crypto["max_1h"] = (0, float(-sys.maxsize))
+	crypto["personal_notification_prices"] = []
+	crypto["last_received_price"] = float(candlesticks[-1][4])
+	crypto["last_notif_price"] = 0
+	for i in range(len(candlesticks), 0, -1):
+		candlestick = candlesticks[-i]
+		#TOHLC - Time, Open, High, Low, Close
+		if (i <= 60):
+			if (float(candlestick[2]) > crypto["max_1h"][1]):
+				crypto["max_1h"] = (int(candlestick[0]), float(candlestick[2]))
+			elif (float(candlestick[3]) < crypto["min_1h"][1]):
+				crypto["min_1h"] = (int(candlestick[0]), float(candlestick[3]))
+		if (i <= 240):
+			if (float(candlestick[2]) > crypto["max_4h"][1]):
+				crypto["max_4h"] = (int(candlestick[0]), float(candlestick[2]))
+			elif (float(candlestick[3]) < crypto["min_4h"][1]):
+				crypto["min_4h"] = (int(candlestick[0]), float(candlestick[3]))
+		if (i <= 1440):
+			if (float(candlestick[2]) > crypto["max_24h"][1]):
+				crypto["max_24h"] = (int(candlestick[0]), float(candlestick[2]))
+			elif (float(candlestick[3]) < crypto["min_24h"][1]):
+				crypto["min_24h"] = (int(candlestick[0]), float(candlestick[3]))
+		crypto["prices"][int(candlestick[0])] = float(candlestick[4])
 
 def start_data_streams():
-	bsm = BinanceSocketManager(client)
+	main_info["bsm"] = BinanceSocketManager(main_info["binance_client"])
 
 	for symbol in crypto_list:
 		crypto = crypto_list[symbol]
-		crypto["stream_key"] = bsm.start_kline_socket(symbol, received_price_msg, interval=Client.KLINE_INTERVAL_1MINUTE)
+		crypto["stream_key"] = main_info["bsm"].start_kline_socket(symbol, received_price_msg, interval=Client.KLINE_INTERVAL_1MINUTE)
 
-	bsm.start()
+	main_info["bsm"].start()
 
 def received_price_msg(msg):
 	try:
 		if msg['e'] != 'error':
-			global is_ready_to_receive_new_msg
-			if is_ready_to_receive_new_msg == True:
-				is_ready_to_receive_new_msg = False
+			if main_info["is_ready_to_receive_new_msg"] == True:
+				main_info["is_ready_to_receive_new_msg"] = False
 				received_price(msg['s'], msg['k']['t'], float(msg['k']['c']))
-				is_ready_to_receive_new_msg = True
+				main_info["is_ready_to_receive_new_msg"] = True
 		else:
 			comm.report_error(msg="Error 'B' with the price getter info...",
 				mail=False, console=True, log=True, telegram=True, quit=False)
@@ -124,14 +118,14 @@ def received_price(symbol, timestamp, price):
 	for notification_elem in list(crypto["personal_notification_prices"]):
 		if ((notification_elem[0] > notification_elem[1]) and (price < notification_elem[1])) or\
 			((notification_elem[0] < notification_elem[1]) and (price > notification_elem[1])):
-			comm.communicate(msg=f"!notify cmd: {symbol} crossed {notification_elem[1]} current price: {price}", mail=False, console=True, telegram=True, log=True)
+			comm.communicate(msg=f"!notify cmd: {symbol} crossed {notification_elem[1]} current price: {price}", mail=False, console=True, telegram=True, log=True, discord_channel=crypto["channel"])
 			crypto["personal_notification_prices"].remove(notification_elem)
 	# Updating price history
 	if timestamp in crypto["prices"]:
 		crypto["prices"][timestamp] = price
 	else:
 		comm.communicate(msg=str(symbol) + " | Updating " + str(timestamp) + ", price: " + str(price),
-			mail=False, console=True, telegram=False, log=True)
+			mail=False, console=True, telegram=False, log=True, discord_channel=crypto["channel"])
 		crypto["prices"][int(timestamp)] = price
 		if (len(crypto["prices"]) > 1440): # There are 1440 minutes in a day
 			crypto["prices"].pop(timestamp - (3600000 * 24)) # 3600000 is 1 hour in milliseconds
@@ -178,7 +172,7 @@ def new_record(symbol, timeframe, record_type, price, crypto):
 	if (diff < 0):
 		diff *= -1
 	if (diff / price >= 0.002): #0.002 is for 0.2% difference this could be a variable but flemme
-		comm.communicate(msg=f"{symbol} --> {timeframe} New {record_type}: {price}", mail=False, console=True, telegram=True if (options[timeframe + "_notifs"] == 1) else False, log=True)
+		comm.communicate(msg=f"{symbol} --> {timeframe} New {record_type}: {price}", mail=False, console=True, telegram=True if (options[timeframe + "_notifs"] == 1) and (crypto["options"][timeframe + "_notifs"] == 1) else False, log=True, discord_channel=crypto["channel"])
 		crypto["last_notif_price"] = price
 
 def find_new_record(timestamp, timeframe, prices, record_type):
@@ -192,7 +186,6 @@ def find_new_record(timestamp, timeframe, prices, record_type):
 			else:
 				if prices[test_timestamp] > record[1]:
 					record = (test_timestamp, prices[test_timestamp])
-		
 		#comm.communicate(msg="TEST timestamp: " + str(timestamp) + " record_type: " + record_type + " time_frame: " + timeframe + " New record found: " + str(record), mail=False, console=False, telegram=True, log=True)
 		return record
 	except Exception as e:
@@ -200,10 +193,30 @@ def find_new_record(timestamp, timeframe, prices, record_type):
 
 @tasks.loop(seconds=1)
 async def my_task():
-	channel = config.disc_client.get_channel(private_config.DISCORD_NOTIF_CHANNEL)
 	while len(config.discord_msgs_buffer) > 0:
-		await channel.send(config.discord_msgs_buffer[0])
+		await config.discord_msgs_buffer[0]["channel"].send(config.discord_msgs_buffer[0]["msg"])
 		config.discord_msgs_buffer.pop(0)
+
+@config.disc_client.command(name="add_crypto")
+async def add_crypto_command(ctx, *args):
+	usage_str = "Usage: !add_crypto <name>"
+	if len(args) == 1:
+		try:
+			symbol = args[0]
+			avg_price = main_info["binance_client"].get_symbol_ticker(symbol=symbol)["price"]
+			await ctx.channel.send("Loading " + symbol + "...")
+			crypto_list[symbol] = {"symbol": symbol}
+			crypto = crypto_list[symbol]
+			await get_discord_channel(ctx.guild, symbol)
+			download_history_one_crypto(crypto, symbol)
+			crypto["stream_key"] = main_info["bsm"].start_kline_socket(symbol, received_price_msg, interval=Client.KLINE_INTERVAL_1MINUTE)
+			save_config(CONFIG_FILE_PATH)
+			await ctx.channel.send("Added " + symbol + " to the crypto_list.")
+		except Exception as e:
+			await ctx.channel.send("An error occurred, does the crypto exist on Binance ?")
+			print("Caught an exception: " + str(e))
+	else:
+		await ctx.channel.send(usage_str)
 
 @config.disc_client.command(name="notify")
 async def notify_command(ctx, *args):
@@ -243,31 +256,77 @@ async def notify_command(ctx, *args):
 
 @config.disc_client.command(name="options")
 async def options_command(ctx, *args):
-	usage_str = "Usage: !options <set/list> <option name> <value (1 or 0 for bools)>"
-	if len(args) == 3:
-		if args[0].lower() == "set":
-			try:
-				option_name = args[1]
-				option_value = float(args[2])
-				if option_name in options:
-					options[option_name] = option_value
-					save_config(CONFIG_FILE_PATH)
-					await ctx.channel.send("Changed option " + args[1] + " to " + args[2] + ".")
-				else:
-					await ctx.channel.send("Option " + args[1] + " not found.")
-			except:
+	usage_str = "Usage: !options <'main' or symbol ex: main/ETHUSDT> <set/list> <option name> <value (1 or 0 for bools)>"
+	if len(args) == 4:
+		category = args[0]
+		if category.lower() == "main":
+			if args[1].lower() == "set":
+				try:
+					option_name = args[2]
+					option_value = float(args[3])
+					if option_name in options:
+						options[option_name] = option_value
+						save_config(CONFIG_FILE_PATH)
+						await ctx.channel.send("Changed option " + option_name + " to " + args[3] + ".")
+					else:
+						await ctx.channel.send("Option " + option_name + " not found.")
+				except:
+					await ctx.channel.send(usage_str)
+			else:
+				await ctx.channel.send(usage_str)
+		elif category.upper() in crypto_list:
+			if args[1].lower() == "set":
+				try:
+					option_name = args[2]
+					option_value = float(args[3])
+					crypto = crypto_list[category]
+					if option_name in crypto["options"]:
+						crypto["options"][option_name] = option_value
+						save_config(CONFIG_FILE_PATH)
+						await ctx.channel.send("Changed option " + option_name + " to " + args[3] + " for " + category + ".")
+					else:
+						await ctx.channel.send("Option " + option_name + " not found.")
+				except Exception as e:
+					await ctx.channel.send(usage_str)
+					print("Exception: " + str(e))
+			else:
 				await ctx.channel.send(usage_str)
 		else:
 			await ctx.channel.send(usage_str)
-	elif (len(args) == 1):
-		if args[0].lower() == "list":
-			await ctx.channel.send("Here are the available options\n- option_name | option_value")
-			for key, value in options.items():
-				await ctx.channel.send("- " + str(key) + " | " + str(value))
+	elif (len(args) == 2):
+		category = args[0]
+		if category.lower() == "main":
+			if args[1].lower() == "list":
+				await ctx.channel.send("Here are the available options\n- option_name | option_value")
+				for key, value in options.items():
+					await ctx.channel.send("- " + str(key) + " | " + str(value))
+			else:
+				await ctx.channel.send(usage_str)
+		elif category.upper() in crypto_list:
+			if args[1].lower() == "list":
+				await ctx.channel.send("Available options for " + category + ":")
+				for key, value in crypto_list[category]["options"].items():
+					await ctx.channel.send("- " + str(key) + " | " + str(value))
+			else:
+				await ctx.channel.send(usage_str)
 		else:
 			await ctx.channel.send(usage_str)
 	else:
 		await ctx.channel.send(usage_str)
+
+async def check_discord_channels(guild):
+	print("Checking channels...")
+	main_info["control_channel"] = discord.utils.get(guild.channels, name=config.CONTROL_CHANNEL_NAME)
+	for symbol in crypto_list:
+		await get_discord_channel(guild, symbol)
+
+async def get_discord_channel(guild, symbol):
+	channel = discord.utils.get(guild.channels, name=symbol.lower())
+	while (channel == None):
+		await guild.create_text_channel(symbol.lower())
+		channel = discord.utils.get(guild.channels, name=symbol.lower())
+	crypto_list[symbol]["channel"] = channel
+			
 
 
 
@@ -286,16 +345,21 @@ def main(config_file = "configs/default.json"):
 	logging.getLogger("urllib3").setLevel(logging.WARNING)
 	global CONFIG_FILE_PATH
 	CONFIG_FILE_PATH = config_file
+	main_info["is_ready_to_receive_new_msg"] = True
+	main_info["binance_client"] = Client(private_config.API_KEY, private_config.API_SECRET)
+	main_info["bsm"] = None
 	load_config(config_file)
-	download_history()
+	for symbol in crypto_list:
+		download_history_one_crypto(crypto=crypto_list[symbol], symbol=symbol)
 	start_data_streams()
-	comm.communicate(msg="Finished loading!", mail=False, console=True, telegram=True if (config.RELEASE_MODE) else False, log=True)
 	config.disc_client.run(private_config.DISCORD_TOKEN)
+	
 
 @config.disc_client.event
 async def on_ready():
 	my_task.start()
-	print(f"Discord bot connected!")
+	await check_discord_channels(config.disc_client.get_guild(private_config.DISCORD_GUILD_NAME))
+	comm.communicate(msg="Finished loading!", mail=False, console=True, telegram=True if (config.RELEASE_MODE) else False, log=True, discord_channel=main_info["control_channel"])
 
 if __name__ == "__main__":
 	argv = sys.argv

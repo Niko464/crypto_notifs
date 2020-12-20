@@ -51,12 +51,12 @@ def report_error(msg, mail, telegram, console, log, quit):
 
 
 
-def communicate(msg, mail, telegram, console, log):
+def communicate(msg, mail, telegram, console, log, discord_channel = None):
 	if (mail == True and config.RELEASE_MODE == True):
 		send_mail_to_mailing_list(msg)
 	if (telegram == True):
-		#send_telegram_message(msg)
-		config.discord_msgs_buffer.append(msg)
+		if (discord_channel != None):
+			config.discord_msgs_buffer.append({"channel": discord_channel, "msg": msg})
 	if (console == True):
 		print(msg)
 	if (log == True):
