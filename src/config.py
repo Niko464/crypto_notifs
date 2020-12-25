@@ -5,6 +5,7 @@ RELEASE_MODE = True
 LOG_DIRECTORY = "logs/"
 BOT_NAME = "Notifs"
 CONTROL_CHANNEL_NAME = "crypto_notifs"
+MIN_MOVEMENT_PERCENTAGE_FOR_NOTIF = 0.1
 
 
 global disc_client
