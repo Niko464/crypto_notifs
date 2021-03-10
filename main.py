@@ -14,6 +14,7 @@ import discord
 from discord.ext import tasks
 import asyncio
 import traceback
+import time
 
 
 
@@ -26,12 +27,16 @@ main_info = {}
 crypto_list = {}
 options = {}
 
+def curr_time():
+	return time.time() * 1000
+
 def load_config(file):
 	try:
 		with open(file) as json_file:
 			json_data = json.load(json_file)
 			for crypto_elem in json_data["crypto_list"]:
 				crypto_list[crypto_elem["symbol"]] = crypto_elem
+			print(str(crypto_list[crypto_elem["symbol"]]))
 			for key, value in json_data["options"].items():
 				options[key] = value
 	except Exception as e:
@@ -52,9 +57,8 @@ def save_config(file):
 		with open(file, 'w') as file:
 			json.dump(data, file)
 	except Exception as e:
-		print("Error while saving config: " + file + " exiting...")
-		print("Exception: " + str(e))
-		sys.exit(-1)
+		comm.report_error(msg="Error while saving config: " + file + " exiting... " + str(e),
+			mail=False, console=True, log=True, telegram=True, quit=True, discord_channel=main_info["control_channel"])
 
 def download_history_one_crypto(crypto, symbol):
 	print("Downloading history of " + str(symbol) + "...")
@@ -70,6 +74,7 @@ def download_history_one_crypto(crypto, symbol):
 	crypto["last_received_price"] = float(candlesticks[-1][4])
 	crypto["last_notif_price"] = 0
 	crypto["last_10secs_prices"] = []
+	crypto["last_notification_record_time"] = 0
 	for i in range(len(candlesticks), 0, -1):
 		candlestick = candlesticks[-i]
 		#TOHLC - Time, Open, High, Low, Close
@@ -127,8 +132,13 @@ def received_price(symbol, timestamp, price):
 		crypto["prices"][timestamp] = price
 	else:
 		crypto["prices"][int(timestamp)] = price
-		if (len(crypto["prices"]) > 1440): # There are 1440 minutes in a day
-			crypto["prices"].pop(timestamp - (3600000 * 24)) # 3600000 is 1 hour in milliseconds
+		counter = 0
+		while (len(crypto["prices"]) > 1440): # There are 1440 minutes in a day
+			try:
+				crypto["prices"].pop(timestamp - (3600000 * 24) + (60000 * counter)) # 3600000 is 1 hour in milliseconds
+				counter += 1
+			except KeyError as e:
+				continue
 	# Checking if current records are outdated
 	if (crypto["max_1h"][0] + 3600000 < timestamp):
 		crypto["max_1h"] = find_new_record(timestamp, '1h', crypto["prices"], 'High')
@@ -146,20 +156,21 @@ def received_price(symbol, timestamp, price):
 	crypto["last_10secs_prices"].append(price)
 	if (len(crypto["last_10secs_prices"]) > 10):
 		crypto["last_10secs_prices"].pop(0)
-		record = {"percentage": 0.0, "time_ago": 0, "direction": "None"}
-		for i in range(0, 9):
-			percentage = (price - crypto["last_10secs_prices"][i]) / crypto["last_10secs_prices"][i] * 100
-			is_negative = False
-			if percentage < 0:
-				percentage *= -1
-				is_negative = True
-			if percentage > record["percentage"]:
-				record["percentage"] = percentage
-				record["time_ago"] = i
-				record["direction"] = "Up" if is_negative == False else "Down"
-		if record["percentage"] > config.MIN_MOVEMENT_PERCENTAGE_FOR_NOTIF:
-			msg = symbol + " --> High volatility going " + record["direction"] + "! " + str(round(record["percentage"], 2)) + "% in the last " + str(record["time_ago"] + 1) + " seconds (" + str(crypto["last_10secs_prices"][record["time_ago"]]) + " --> " + str(price) + ")."
-			comm.communicate(msg=msg, mail=False, console=True, telegram=True, log=True, discord_channel=crypto["channel"])
+		if curr_time() - 300000 < crypto["last_notification_record_time"]: # if it has been less than 5 minutes since the last record notif
+			record = {"percentage": 0.0, "time_ago": 0, "direction": "None"}
+			for i in range(0, 9):
+				percentage = (price - crypto["last_10secs_prices"][i]) / crypto["last_10secs_prices"][i] * 100
+				is_negative = False
+				if percentage < 0:
+					percentage *= -1
+					is_negative = True
+				if percentage > record["percentage"]:
+					record["percentage"] = percentage
+					record["time_ago"] = i
+					record["direction"] = "Up" if is_negative == False else "Down"
+			if record["percentage"] > config.MIN_MOVEMENT_PERCENTAGE_FOR_NOTIF:
+				msg = symbol + " --> High volatility going " + record["direction"] + "! " + str(round(record["percentage"], 2)) + "% in the last " + str(record["time_ago"] + 1) + " seconds (" + str(crypto["last_10secs_prices"][record["time_ago"]]) + " --> " + str(price) + ")."
+				comm.communicate(msg=msg, mail=False, console=True, telegram=True, log=True, discord_channel=crypto["channel"])
 	# Checking if current price is a record
 	if (price > crypto["max_1h"][1]):
 		crypto["max_1h"] = (int(timestamp), price)
@@ -190,6 +201,8 @@ def new_record(symbol, timeframe, record_type, price, crypto):
 		diff *= -1
 	if (diff / price >= 0.002): #0.002 is for 0.2% difference this could be a variable but flemme
 		comm.communicate(msg=f"{symbol} --> {timeframe} New {record_type}: {price}", mail=False, console=True, telegram=True if (options[timeframe + "_notifs"] == 1) and (crypto["options"][timeframe + "_notifs"] == 1) else False, log=True, discord_channel=crypto["channel"])
+		if (options[timeframe + "_notifs"] == 1) and (crypto["options"][timeframe + "_notifs"] == 1):
+			crypto["last_notification_record_time"] = curr_time()
 		crypto["last_notif_price"] = price
 
 def find_new_record(timestamp, timeframe, prices, record_type):
@@ -225,6 +238,10 @@ async def add_crypto_command(ctx, *args):
 			await ctx.channel.send("Loading " + symbol + "...")
 			crypto_list[symbol] = {"symbol": symbol}
 			crypto = crypto_list[symbol]
+			crypto["options"] = {}
+			crypto["options"]["1h_notifs"] = 0
+			crypto["options"]["4h_notifs"] = 1
+			crypto["options"]["24h_notifs"] = 1
 			await get_discord_channel(ctx.guild, symbol)
 			download_history_one_crypto(crypto, symbol)
 			crypto["stream_key"] = main_info["bsm"].start_kline_socket(symbol, received_price_msg, interval=Client.KLINE_INTERVAL_1MINUTE)
@@ -344,7 +361,6 @@ async def get_discord_channel(guild, symbol):
 		await guild.create_text_channel(symbol.lower())
 		channel = discord.utils.get(guild.channels, name=symbol.lower())
 	crypto_list[symbol]["channel"] = channel
-	print("DISCORD: " + str(symbol) + " channel: " + str(crypto_list[symbol]["channel"]))
 			
 
 
