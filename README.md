@@ -1,5 +1,33 @@
 # crypto_notifs
 
-This project will send me telegram messages regarding the prices of cryptos I will have selected, exemple:
-I select ETH && BTC
-and it will tell me when ETH reaches a new high or low in the past hour, 24 hours, it will also tell me when it reached a new low and is starting to rise again (when to buy)
+## <ins> Disclaimer
+
+I will not support this repository. Use it only if you want.
+
+## <ins> Introduction
+
+This project is about getting notification of price movements in selected crypto markets, the notifications are sent through
+a discord server bot.
+It works by using binance's api to get the real time prices and parses those prices before sending notifications.
+
+## <ins>Usage
+
+To launch the project I use this command:
+
+nohup python3 main.py ./configs/default.json &
+
+## <ins> Notes
+
+For the project to run, you need an extra file in src/private_config.py containing:
+
+API_KEY
+
+API_SECRET
+
+DISCORD_TOKEN
+
+DISCORD_SECRET
+
+DISCORD_GUILD_NAME
+
+DISCORD_NOTIF_CHANNEL
