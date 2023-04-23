@@ -4,19 +4,19 @@ import json
 import logging
 from datetime import datetime
 import datetime as dt
-import src.private_config as private_config
 import src.communication_module as comm
 import src.config as config
 from binance.client import Client
-from binance.websockets import BinanceSocketManager
+from binance import BinanceSocketManager
 from binance.exceptions import *
 import discord
 from discord.ext import tasks
 import asyncio
 import traceback
 import time
+from dotenv import load_dotenv
 
-
+load_dotenv()
 
 global main_info
 global crypto_list
@@ -382,18 +382,21 @@ def main(config_file = "configs/default.json"):
 	global CONFIG_FILE_PATH
 	CONFIG_FILE_PATH = config_file
 	main_info["is_ready_to_receive_new_msg"] = True
-	main_info["binance_client"] = Client(private_config.API_KEY, private_config.API_SECRET)
+	main_info["binance_client"] = Client(os.getenv('API_KEY'), os.getenv('API_SECRET'))
 	main_info["bsm"] = None
 	load_config(config_file)
 	for symbol in crypto_list:
 		download_history_one_crypto(crypto=crypto_list[symbol], symbol=symbol)
-	config.disc_client.run(private_config.DISCORD_TOKEN)
+	config.disc_client.run(os.getenv('DISCORD_TOKEN'))
 	
 
 @config.disc_client.event
 async def on_ready():
 	my_task.start()
-	await check_discord_channels(config.disc_client.get_guild(private_config.DISCORD_GUILD_NAME))
+	print('Connected to the following guilds:')
+	for guild in config.disc_client.guilds:
+		# guild = config.disc_client.get_guild(os.getenv('DISCORD_GUILD_NAME'))
+		await check_discord_channels(guild)
 	start_data_streams()
 	comm.communicate(msg="Finished loading!", mail=False, console=True, telegram=True if (config.RELEASE_MODE) else False, log=True, discord_channel=main_info["control_channel"])
 

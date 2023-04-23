@@ -18,7 +18,7 @@ nohup python3 main.py ./configs/default.json &
 
 ## <ins> Notes
 
-For the project to run, you need an extra file in src/private_config.py containing:
+For the project to run, you need a .env file with:
 
 API_KEY
 
@@ -29,5 +29,3 @@ DISCORD_TOKEN
 DISCORD_SECRET
 
 DISCORD_GUILD_NAME
-
-DISCORD_NOTIF_CHANNEL

@@ -9,6 +9,8 @@ MIN_MOVEMENT_PERCENTAGE_FOR_NOTIF = 1.0
 
 
 global disc_client
-disc_client = commands.Bot(command_prefix='!') #discord.Client()
+intents = discord.Intents.default()
+intents.members = True
+disc_client = commands.Bot(command_prefix='!', intents=intents) #discord.Client()
 global discord_msgs_buffer
 discord_msgs_buffer = []

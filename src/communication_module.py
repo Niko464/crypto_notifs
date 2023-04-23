@@ -4,25 +4,24 @@ import logging
 import time
 import json
 import sys
-import src.private_config as private_config
 import src.config as config
 from requests.exceptions import Timeout
 
 
-def send_mail_to_mailing_list(msg):
-	try:
-		with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
-			smtp.ehlo()
-			smtp.starttls()
-			smtp.ehlo()
-			smtp.login(private_config.EMAIL_ADDRESS, private_config.EMAIL_PASS)
-			subject = 'Crypto notif BOT'
-			body = msg
-			complete_msg = f'Subject: {subject}\n\n{body}'
-			for RECEIVER in config.mailing_list:
-				smtp.sendmail(private_config.EMAIL_ADDRESS, RECEIVER, complete_msg)
-	except:
-		report_error(msg="MAIL FAIL -> Do you have internet ?", log=True, console=True, telegram=False, mail=False, quit=False)
+# def send_mail_to_mailing_list(msg):
+# 	try:
+# 		with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+# 			smtp.ehlo()
+# 			smtp.starttls()
+# 			smtp.ehlo()
+# 			smtp.login(private_config.EMAIL_ADDRESS, private_config.EMAIL_PASS)
+# 			subject = 'Crypto notif BOT'
+# 			body = msg
+# 			complete_msg = f'Subject: {subject}\n\n{body}'
+# 			for RECEIVER in config.mailing_list:
+# 				smtp.sendmail(private_config.EMAIL_ADDRESS, RECEIVER, complete_msg)
+# 	except:
+# 		report_error(msg="MAIL FAIL -> Do you have internet ?", log=True, console=True, telegram=False, mail=False, quit=False)
 
 
 """
