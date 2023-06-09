@@ -62,10 +62,10 @@ class MyClient {
         return this.client
           .getKlines(params)
           .then((klines: Kline[]) => {
-            console.log("TODO: ", klines.length);
+            CryptoManager.getCrypto(symbol).loadHistoricalKlines(klines);
           })
           .catch((err: any) => {
-            console.error("error: ", err);
+            console.error("error getKlines: ", err);
           });
       })
     );
@@ -75,7 +75,6 @@ class MyClient {
     });
 
     console.log("Binance client finished setting up.");
-    // MyDiscordClient.sendSystemMessage("Binance client finished setting up.")
   }
 }
 

@@ -9,6 +9,8 @@ async function main() {
   await CryptoManager.start();
   await MyDiscordClient.start()
   await MyBinanceClient.start();
+
+  MyDiscordClient.sendSystemMessage("Finished loading !")
 }
 
 main()

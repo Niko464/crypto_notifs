@@ -93,6 +93,22 @@ class MyDiscordClient {
     }
     this.controlChannel.send(msg);
   }
+
+  public sendRecordmessage(symbol: string, time: number, price: number, high: boolean) {
+    if (!this.cryptoChannels.has(symbol)) {
+      console.error(`Channel ${symbol} not found`);
+      return;
+    }
+    const channel = this.cryptoChannels.get(symbol);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      console.error(`Channel ${symbol} not found or not a text channel`);
+      return;
+    }
+    channel.send(symbol + `${time}h New ${high ? "high" : "low"}: ${price}`)
+      .catch((err) => {
+        console.error(`Error sending message to channel ${symbol}`, err);
+      });
+  }
 }
 
 export default MyDiscordClient.getInstance();
