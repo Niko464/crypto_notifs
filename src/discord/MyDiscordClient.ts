@@ -104,7 +104,7 @@ class MyDiscordClient {
       console.error(`Channel ${symbol} not found or not a text channel`);
       return;
     }
-    channel.send(symbol + `${time}h New ${high ? "high" : "low"}: ${price}`)
+    channel.send(symbol + ` --> ${time}h New ${high ? "high" : "low"}: ${price}`)
       .catch((err) => {
         console.error(`Error sending message to channel ${symbol}`, err);
       });

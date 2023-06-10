@@ -6,8 +6,8 @@ class CryptoManager {
   private static instance: CryptoManager;
 
   public cryptos: Map<string, Crypto> = new Map<string, Crypto>();
-  public currentCryptoList: string[] = ["ETHUSDT", "DOTUSDT"];
-  public surveillanceTimes = [1, 4, 24]
+  public currentCryptoList: string[] = ["ETHUSDT", "ZILUSDT", "BTCUSDT", "BNBUSDT", "DOTUSDT", "GLMRUSDT"];
+  public surveillanceTimes = [1]
 
   private constructor() {
     console.log("CryptoManager constructor");

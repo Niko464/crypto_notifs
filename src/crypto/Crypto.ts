@@ -65,10 +65,10 @@ export default class Crypto {
           return;
         }
 
-        if (highRecord.timestamp < this.lastReceivedPriceTime - time * 60) {
+        if (highRecord.timestamp < this.lastReceivedPriceTime - (time * 60 * 1000)) {
           highRecord = this.updateRecord(time, true);
         }
-        if (lowRecord.timestamp < this.lastReceivedPriceTime - time * 60) {
+        if (lowRecord.timestamp < this.lastReceivedPriceTime - (time * 60 * 1000)) {
           lowRecord = this.updateRecord(time, false);
         }
 

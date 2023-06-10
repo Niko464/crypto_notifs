@@ -50,31 +50,43 @@ class MyClient {
   public async start() {
     console.log("Binance client is starting...");
 
-    const currTime = Math.floor(Date.now());
-    await Promise.all(
-      CryptoManager.currentCryptoList.map(async (symbol: string) => {
-        const params: KlinesParams = {
-          symbol,
-          interval: "1h",
-          startTime: currTime - 1000 * 3600 * 24, // 24 hours ago
-        };
-
-        return this.client
-          .getKlines(params)
-          .then((klines: Kline[]) => {
-            CryptoManager.getCrypto(symbol).loadHistoricalKlines(klines);
-          })
-          .catch((err: any) => {
-            console.error("error getKlines: ", err);
-          });
-      })
-    );
+    await this.loadHistoricalKlines();
 
     CryptoManager.currentCryptoList.forEach((symbol: string) => {
       this.wsClient.subscribeSpotKline(symbol, "1m");
     });
 
     console.log("Binance client finished setting up.");
+  }
+
+  private async loadHistoricalKlines() {
+    const numMinutes = 60 * 24;
+    const endTime = Math.floor(Date.now());
+    const startTime = endTime - 1000 * 60 * numMinutes;
+    const limit = 360; // limit of klines per request (should be a multiple of numMinutes)
+
+    await Promise.all(
+      CryptoManager.currentCryptoList.map(async (symbol: string) => {
+        for (let i = 0; i < numMinutes / limit; i++) {
+          const params: KlinesParams = {
+            symbol,
+            interval: "1m",
+            startTime: startTime + i * limit * 60 * 1000,
+            endTime: startTime + (i + 1) * limit * 60 * 1000,
+            limit,
+          };
+
+          await this.client
+            .getKlines(params)
+            .then((klines: Kline[]) => {
+              CryptoManager.getCrypto(symbol).loadHistoricalKlines(klines);
+            })
+            .catch((err: any) => {
+              console.error("error getKlines: ", err);
+            });
+        }
+      })
+    );
   }
 }
 

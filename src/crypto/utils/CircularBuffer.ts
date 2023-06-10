@@ -5,12 +5,17 @@ export class CircularBuffer {
 
   constructor(length: number) {
     this.arr = new Array(length);
-    console.log("CircularBuffer constructor: ", this.arr.length);
   }
 
   public push(entry: PriceEntry) {
     this.arr.push(entry);
     this.arr.shift();
+    // for (let i = 0; i < this.arr.length; i++) {
+    //   if (this.arr[i]) {
+    //     console.log("i: ", i, "entry: ", this.arr[i])
+    //     break
+    //   }
+    // }
   }
 
   public findRecord(startTime: number, highest: boolean): PriceEntry {
