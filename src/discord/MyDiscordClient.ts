@@ -51,8 +51,8 @@ class MyDiscordClient {
         this.guild = guild;
       })
       .catch((err) => {
-        console.error(err)
-        console.error("Guild not found");
+        console.error(err);
+        console.error("Guild not found: ", DISCORD_GUILD_ID);
         process.exit(1);
       });
     //Loading control channel
@@ -66,22 +66,23 @@ class MyDiscordClient {
         this.controlChannel = channel;
       });
 
-      if (!this.guild) {
-
-        console.error("No guild... Guild not found ?");
-        process.exit(1);
-      }
+    if (!this.guild) {
+      console.error("No guild... Guild not found ?");
+      process.exit(1);
+    }
     //Loading all the channels
     await this.guild.channels.fetch().then((channels) => {
       CryptoManager.currentCryptoList.forEach((symbol) => {
-        const channel = channels.find((item) => item && item.name === symbol.toLocaleLowerCase());
+        const channel = channels.find(
+          (item) => item && item.name === symbol.toLocaleLowerCase()
+        );
         if (!channel) {
           console.error(`Channel ${symbol} not found`);
           process.exit(1);
         }
         this.cryptoChannels.set(symbol, channel);
-      })
-    })
+      });
+    });
     console.log("Discord client is ready");
   }
 
@@ -96,7 +97,12 @@ class MyDiscordClient {
     this.controlChannel.send(msg);
   }
 
-  public sendRecordmessage(symbol: string, time: number, price: number, high: boolean) {
+  public sendRecordmessage(
+    symbol: string,
+    time: number,
+    price: number,
+    high: boolean
+  ) {
     if (!this.cryptoChannels.has(symbol)) {
       console.error(`Channel ${symbol} not found`);
       return;
@@ -106,7 +112,8 @@ class MyDiscordClient {
       console.error(`Channel ${symbol} not found or not a text channel`);
       return;
     }
-    channel.send(symbol + ` --> ${time}h New ${high ? "high" : "low"}: ${price}`)
+    channel
+      .send(symbol + ` --> ${time}h New ${high ? "high" : "low"}: ${price}`)
       .catch((err) => {
         console.error(`Error sending message to channel ${symbol}`, err);
       });
