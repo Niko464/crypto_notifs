@@ -51,6 +51,7 @@ class MyDiscordClient {
         this.guild = guild;
       })
       .catch((err) => {
+        console.error(err)
         console.error("Guild not found");
         process.exit(1);
       });
@@ -66,7 +67,8 @@ class MyDiscordClient {
       });
 
       if (!this.guild) {
-        console.error("Guild not found");
+
+        console.error("No guild... Guild not found ?");
         process.exit(1);
       }
     //Loading all the channels
